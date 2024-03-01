@@ -37,6 +37,7 @@ const PROCESSINFOCLASS = windows.PROCESSINFOCLASS;
 const LPVOID = windows.LPVOID;
 const LPCVOID = windows.LPCVOID;
 const SECTION_INHERIT = windows.SECTION_INHERIT;
+const FILE_IO_COMPLETION_INFORMATION = windows.FILE_IO_COMPLETION_INFORMATION;
 
 pub extern "ntdll" fn NtQueryInformationProcess(
     ProcessHandle: HANDLE,
@@ -341,3 +342,35 @@ pub extern "ntdll" fn NtProtectVirtualMemory(
 pub extern "ntdll" fn RtlExitUserProcess(
     ExitStatus: u32,
 ) callconv(WINAPI) noreturn;
+
+pub extern "ntdll" fn NtCreateIoCompletion(
+    IoCompletionHandle: *HANDLE,
+    DesiredAccess: ACCESS_MASK,
+    ObjectAttributes: ?*OBJECT_ATTRIBUTES,
+    Count: ULONG,
+) callconv(WINAPI) NTSTATUS;
+
+pub extern "ntdll" fn NtRemoveIoCompletion(
+    IoCompletionHandle: HANDLE,
+    KeyContext: *PVOID,
+    ApcContext: *PVOID,
+    IoStatusBlock: *IO_STATUS_BLOCK,
+    Timeout: ?*LARGE_INTEGER,
+) callconv(WINAPI) NTSTATUS;
+
+pub extern "ntdll" fn NtRemoveIoCompletionEx(
+    IoCompletionHandle: HANDLE,
+    IoCompletionInformation: [*]FILE_IO_COMPLETION_INFORMATION,
+    Count: ULONG,
+    NumEntriesRemoved: *ULONG,
+    Timeout: ?*LARGE_INTEGER,
+    Alertable: BOOLEAN,
+) callconv(WINAPI) NTSTATUS;
+
+pub extern fn NtSetIoCompletion(
+    IoCompletionHandle: HANDLE,
+    KeyContext: PVOID,
+    ApcContext: ?PVOID,
+    IoStatus: NTSTATUS,
+    IoStatusInformation: ULONG,
+) callconv(WINAPI) NTSTATUS;

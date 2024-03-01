@@ -338,109 +338,102 @@ pub fn WaitForMultipleObjectsEx(handles: []const HANDLE, waitAll: bool, millisec
     }
 }
 
-pub const CreateIoCompletionPortError = error{Unexpected};
+pub fn completionPortCreate(concurrent_thread_count: DWORD) error{Unexpected}!HANDLE {
+    var port: HANDLE = undefined;
+    const rc = ntdll.NtCreateIoCompletion(
+        &port,
+        IO_COMPLETION_ALL_ACCESS,
+        null,
+        concurrent_thread_count,
+    );
+    if (rc != .SUCCESS)
+        return unexpectedStatus(rc);
 
-pub fn CreateIoCompletionPort(
-    file_handle: HANDLE,
-    existing_completion_port: ?HANDLE,
-    completion_key: usize,
-    concurrent_thread_count: DWORD,
-) CreateIoCompletionPortError!HANDLE {
-    const handle = kernel32.CreateIoCompletionPort(file_handle, existing_completion_port, completion_key, concurrent_thread_count) orelse {
-        switch (kernel32.GetLastError()) {
-            .INVALID_PARAMETER => unreachable,
-            else => |err| return unexpectedError(err),
-        }
+    return port;
+}
+
+pub fn completionPortAssociateHandle(
+    port: HANDLE,
+    handle: HANDLE,
+    completion_key: ?*anyopaque,
+) error{Unexpected}!void {
+    var info = FILE_COMPLETION_INFORMATION{
+        .Port = port,
+        .Key = completion_key,
     };
-    return handle;
+    var iosb: IO_STATUS_BLOCK = undefined;
+    const rc = ntdll.NtSetInformationFile(
+        handle,
+        &iosb,
+        &info,
+        @sizeOf(FILE_COMPLETION_INFORMATION),
+        .FileCompletionInformation,
+    );
+    if (rc != .SUCCESS)
+        return unexpectedStatus(rc);
 }
 
-pub const PostQueuedCompletionStatusError = error{Unexpected};
-
-pub fn PostQueuedCompletionStatus(
-    completion_port: HANDLE,
+pub fn completionPortPostQueuedStatus(
+    port: HANDLE,
     bytes_transferred_count: DWORD,
-    completion_key: usize,
-    lpOverlapped: ?*OVERLAPPED,
-) PostQueuedCompletionStatusError!void {
-    if (kernel32.PostQueuedCompletionStatus(completion_port, bytes_transferred_count, completion_key, lpOverlapped) == 0) {
-        switch (kernel32.GetLastError()) {
-            else => |err| return unexpectedError(err),
-        }
-    }
-}
-
-pub const GetQueuedCompletionStatusResult = enum {
-    Normal,
-    Aborted,
-    Cancelled,
-    EOF,
-};
-
-pub fn GetQueuedCompletionStatus(
-    completion_port: HANDLE,
-    bytes_transferred_count: *DWORD,
-    lpCompletionKey: *usize,
-    lpOverlapped: *?*OVERLAPPED,
-    dwMilliseconds: DWORD,
-) GetQueuedCompletionStatusResult {
-    if (kernel32.GetQueuedCompletionStatus(
-        completion_port,
+    completion_key: *anyopaque,
+    overlapped: ?*OVERLAPPED,
+) error{Unexpected}!void {
+    const rc = ntdll.NtSetIoCompletion(
+        port,
+        completion_key,
+        overlapped,
+        .SUCCESS,
         bytes_transferred_count,
-        lpCompletionKey,
-        lpOverlapped,
-        dwMilliseconds,
-    ) == FALSE) {
-        switch (kernel32.GetLastError()) {
-            .ABANDONED_WAIT_0 => return GetQueuedCompletionStatusResult.Aborted,
-            .OPERATION_ABORTED => return GetQueuedCompletionStatusResult.Cancelled,
-            .HANDLE_EOF => return GetQueuedCompletionStatusResult.EOF,
-            else => |err| {
-                if (std.debug.runtime_safety) {
-                    @setEvalBranchQuota(2500);
-                    std.debug.panic("unexpected error: {}\n", .{err});
-                }
-            },
-        }
-    }
-    return GetQueuedCompletionStatusResult.Normal;
+    );
+    if (rc != .SUCCESS)
+        return unexpectedStatus(rc);
 }
 
-pub const GetQueuedCompletionStatusError = error{
+pub const GetQueuedStatusError = error{
     Aborted,
     Cancelled,
     EOF,
     Timeout,
+    ApcDelivered,
 } || std.os.UnexpectedError;
 
-pub fn GetQueuedCompletionStatusEx(
-    completion_port: HANDLE,
-    completion_port_entries: []OVERLAPPED_ENTRY,
+pub fn completionPortGetQueuedStatusEx(
+    port: HANDLE,
+    entries: []OVERLAPPED_ENTRY,
     timeout_ms: ?DWORD,
     alertable: bool,
-) GetQueuedCompletionStatusError!u32 {
+) GetQueuedStatusError!u32 {
+    // Note: This NT structure has 4 extra bytes of padding on 64-bit targets due
+    // to `IO_STATUS_BLOCK.Information` being `usize`. This was exploited in
+    // CVE 2017-8708[1], where the padding was not cleared and leaked kernel memory.
+    //
+    // [1]: https://bugs.chromium.org/p/project-zero/issues/detail?id=1269
+    const info: [*]FILE_IO_COMPLETION_INFORMATION = @ptrCast(entries.ptr);
+    const len: ULONG = @intCast(entries.len);
     var num_entries_removed: u32 = 0;
 
-    const success = kernel32.GetQueuedCompletionStatusEx(
-        completion_port,
-        completion_port_entries.ptr,
-        @as(ULONG, @intCast(completion_port_entries.len)),
+    const rc = ntdll.NtRemoveIoCompletionEx(
+        port,
+        info,
+        len,
         &num_entries_removed,
-        timeout_ms orelse INFINITE,
+        if (timeout_ms) |ms| blk: {
+            // Relative timeout in 100ns intervals.
+            var time = @as(i64, @intCast(ms)) * -10000;
+            break :blk &time;
+        } else null,
         @intFromBool(alertable),
     );
-
-    if (success == FALSE) {
-        return switch (kernel32.GetLastError()) {
-            .ABANDONED_WAIT_0 => error.Aborted,
-            .OPERATION_ABORTED => error.Cancelled,
-            .HANDLE_EOF => error.EOF,
-            .WAIT_TIMEOUT => error.Timeout,
-            else => |err| unexpectedError(err),
-        };
-    }
-
-    return num_entries_removed;
+    return switch (rc) {
+        .SUCCESS => num_entries_removed,
+        .ABANDONED => error.Aborted,
+        .CANCELLED => error.Cancelled,
+        .END_OF_FILE => error.EOF,
+        .TIMEOUT => error.Timeout,
+        .USER_APC => error.ApcDelivered,
+        else => |err| unexpectedStatus(err),
+    };
 }
 
 pub fn CloseHandle(hObject: HANDLE) void {
@@ -2833,6 +2826,11 @@ pub const FILE_DISPOSITION_INFORMATION_EX = extern struct {
     Flags: ULONG,
 };
 
+pub const FILE_COMPLETION_INFORMATION = extern struct {
+    Port: HANDLE,
+    Key: ?PVOID,
+};
+
 const FILE_DISPOSITION_DO_NOT_DELETE: ULONG = 0x00000000;
 const FILE_DISPOSITION_DELETE: ULONG = 0x00000001;
 const FILE_DISPOSITION_POSIX_SEMANTICS: ULONG = 0x00000002;
@@ -3676,6 +3674,16 @@ pub const FILE_NOTIFY_CHANGE_LAST_WRITE = 16;
 pub const FILE_NOTIFY_CHANGE_DIR_NAME = 2;
 pub const FILE_NOTIFY_CHANGE_FILE_NAME = 1;
 pub const FILE_NOTIFY_CHANGE_ATTRIBUTES = 4;
+
+// Flags for NtCreateIoCompletion
+pub const IO_COMPLETION_MODIFY_STATE: DWORD = 0x0002;
+pub const IO_COMPLETION_ALL_ACCESS: DWORD = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3;
+
+pub const FILE_IO_COMPLETION_INFORMATION = extern struct {
+    CompletionKey: ULONG_PTR,
+    CompletionValue: ULONG_PTR,
+    IoStatusBlock: IO_STATUS_BLOCK,
+};
 
 pub const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
     dwSize: COORD,
