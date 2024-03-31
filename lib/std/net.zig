@@ -249,7 +249,7 @@ pub const Address = extern union {
                 &mem.toBytes(@as(c_int, 1)),
             );
             switch (native_os) {
-                .windows => {},
+                .windows, .solaris, .illumos => {},
                 else => try posix.setsockopt(
                     sockfd,
                     posix.SOL.SOCKET,
