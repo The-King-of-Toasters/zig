@@ -66,6 +66,12 @@ static const char *get_host_os(void) {
     return "freebsd";
 #elif defined(__HAIKU__)
     return "haiku";
+#elif defined(__sun__)
+#if defined(__illumos__)
+    return "illumos";
+#else
+    return "solaris";
+#endif // __illumos__
 #else
     panic("unknown host os, specify with ZIG_HOST_TARGET_OS");
 #endif
