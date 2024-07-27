@@ -3307,9 +3307,9 @@ pub const VOLUME_NAME_NONE = 0x4;
 pub const VOLUME_NAME_NT = 0x2;
 
 pub const SECURITY_ATTRIBUTES = extern struct {
-    nLength: DWORD,
-    lpSecurityDescriptor: ?*anyopaque,
-    bInheritHandle: BOOL,
+    nLength: DWORD = @sizeOf(SECURITY_ATTRIBUTES),
+    lpSecurityDescriptor: ?*anyopaque = null,
+    bInheritHandle: BOOL = FALSE,
 };
 
 pub const PIPE_ACCESS_INBOUND = 0x00000001;

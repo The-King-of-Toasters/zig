@@ -731,9 +731,7 @@ fn spawnPosix(self: *ChildProcess) SpawnError!void {
 
 fn spawnWindows(self: *ChildProcess) SpawnError!void {
     var saAttr = windows.SECURITY_ATTRIBUTES{
-        .nLength = @sizeOf(windows.SECURITY_ATTRIBUTES),
-        .bInheritHandle = windows.TRUE,
-        .lpSecurityDescriptor = null,
+        .bInheritHandle = @intFromBool(true),
     };
 
     const any_ignore = (self.stdin_behavior == StdIo.Ignore or self.stdout_behavior == StdIo.Ignore or self.stderr_behavior == StdIo.Ignore);
