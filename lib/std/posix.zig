@@ -2736,7 +2736,11 @@ pub fn renameatW(
 ) RenameError!void {
     const src_fd = windows.OpenFile(old_path_w, .{
         .dir = old_dir_fd,
-        .access_mask = windows.SYNCHRONIZE | windows.GENERIC_WRITE | windows.DELETE,
+        .access_mask = .{
+            .SYNCHRONIZE = true,
+            .GENERIC = .{ .WRITE = true },
+            .STANDARD = .{ .DELETE = true },
+        },
         .creation = windows.FILE_OPEN,
         .filter = .any, // This function is supposed to rename both files and directories.
         .follow_symlinks = false,
@@ -2910,7 +2914,10 @@ pub fn mkdiratW(dir_fd: fd_t, sub_path_w: []const u16, mode: u32) MakeDirError!v
     _ = mode;
     const sub_dir_handle = windows.OpenFile(sub_path_w, .{
         .dir = dir_fd,
-        .access_mask = windows.GENERIC_READ | windows.SYNCHRONIZE,
+        .access_mask = .{
+            .GENERIC = .{ .READ = true },
+            .SYNCHRONIZE = true,
+        },
         .creation = windows.FILE_CREATE,
         .filter = .dir_only,
     }) catch |err| switch (err) {
@@ -3004,7 +3011,10 @@ pub fn mkdirW(dir_path_w: []const u16, mode: u32) MakeDirError!void {
     _ = mode;
     const sub_dir_handle = windows.OpenFile(dir_path_w, .{
         .dir = fs.cwd().fd,
-        .access_mask = windows.GENERIC_READ | windows.SYNCHRONIZE,
+        .access_mask = .{
+            .GENERIC = .{ .READ = true },
+            .SYNCHRONIZE = true,
+        },
         .creation = windows.FILE_CREATE,
         .filter = .dir_only,
     }) catch |err| switch (err) {
@@ -5444,14 +5454,15 @@ pub fn realpathW(pathname: []const u16, out_buffer: *[max_path_bytes]u8) RealPat
     const w = windows;
 
     const dir = fs.cwd().fd;
-    const access_mask = w.GENERIC_READ | w.SYNCHRONIZE;
-    const share_access = w.FILE_SHARE_READ | w.FILE_SHARE_WRITE | w.FILE_SHARE_DELETE;
     const creation = w.FILE_OPEN;
     const h_file = blk: {
         const res = w.OpenFile(pathname, .{
             .dir = dir,
-            .access_mask = access_mask,
-            .share_access = share_access,
+            .access_mask = .{
+                .GENERIC = .{ .READ = true },
+                .SYNCHRONIZE = true,
+            },
+            .share_access = .{},
             .creation = creation,
             .filter = .any,
         }) catch |err| switch (err) {

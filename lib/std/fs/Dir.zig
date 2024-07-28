@@ -921,9 +921,13 @@ pub fn openFileW(self: Dir, sub_path_w: []const u16, flags: File.OpenFlags) File
     const file: File = .{
         .handle = try w.OpenFile(sub_path_w, .{
             .dir = self.fd,
-            .access_mask = w.SYNCHRONIZE |
-                (if (flags.isRead()) @as(u32, w.GENERIC_READ) else 0) |
-                (if (flags.isWrite()) @as(u32, w.GENERIC_WRITE) else 0),
+            .access_mask = .{
+                .SYNCHRONIZE = true,
+                .GENERIC = .{
+                    .READ = flags.isRead(),
+                    .WRITE = flags.isWrite(),
+                },
+            },
             .creation = w.FILE_OPEN,
         }),
     };
@@ -1066,11 +1070,16 @@ pub fn createFileZ(self: Dir, sub_path_c: [*:0]const u8, flags: File.CreateFlags
 /// [WTF-16](https://simonsapin.github.io/wtf-8/#potentially-ill-formed-utf-16) encoded.
 pub fn createFileW(self: Dir, sub_path_w: []const u16, flags: File.CreateFlags) File.OpenError!File {
     const w = windows;
-    const read_flag = if (flags.read) @as(u32, w.GENERIC_READ) else 0;
     const file: File = .{
         .handle = try w.OpenFile(sub_path_w, .{
             .dir = self.fd,
-            .access_mask = w.SYNCHRONIZE | w.GENERIC_WRITE | read_flag,
+            .access_mask = .{
+                .SYNCHRONIZE = true,
+                .GENERIC = .{
+                    .READ = flags.read,
+                    .WRITE = true,
+                },
+            },
             .creation = if (flags.exclusive)
                 @as(u32, w.FILE_CREATE)
             else if (flags.truncate)
@@ -1179,7 +1188,12 @@ pub fn makePath(self: Dir, sub_path: []const u8) (MakeError || StatFileError)!vo
 /// This function is not atomic, and if it returns an error, the file system may
 /// have been modified regardless.
 /// `sub_path` should be encoded as [WTF-8](https://simonsapin.github.io/wtf-8/).
-fn makeOpenPathAccessMaskW(self: Dir, sub_path: []const u8, access_mask: u32, no_follow: bool) (MakeError || OpenError || StatFileError)!Dir {
+fn makeOpenPathAccessMaskW(
+    self: Dir,
+    sub_path: []const u8,
+    access_mask: windows.ACCESS_MASK,
+    no_follow: bool,
+) (MakeError || OpenError || StatFileError)!Dir {
     const w = windows;
     var it = try fs.path.componentIterator(sub_path);
     // If there are no components in the path, then create a dummy component with the full path.
@@ -1234,14 +1248,20 @@ fn makeOpenPathAccessMaskW(self: Dir, sub_path: []const u8, access_mask: u32, no
 /// On other platforms, `sub_path` is an opaque sequence of bytes with no particular encoding.
 pub fn makeOpenPath(self: Dir, sub_path: []const u8, open_dir_options: OpenOptions) (MakeError || OpenError || StatFileError)!Dir {
     return switch (native_os) {
-        .windows => {
-            const w = windows;
-            const base_flags = w.STANDARD_RIGHTS_READ | w.FILE_READ_ATTRIBUTES | w.FILE_READ_EA |
-                w.SYNCHRONIZE | w.FILE_TRAVERSE |
-                (if (open_dir_options.iterate) w.FILE_LIST_DIRECTORY else @as(u32, 0));
-
-            return self.makeOpenPathAccessMaskW(sub_path, base_flags, open_dir_options.no_follow);
-        },
+        .windows => self.makeOpenPathAccessMaskW(
+            sub_path,
+            .{
+                .STANDARD = windows.ACCESS_MASK.STANDARD.READ,
+                .SPECIFIC = .{ .DIRECTORY = .{
+                    .READ_ATTRIBUTES = true,
+                    .READ_EA = true,
+                    .TRAVERSE = true,
+                    .LIST = open_dir_options.iterate,
+                } },
+                .SYNCHRONIZE = true,
+            },
+            open_dir_options.no_follow,
+        ),
         else => {
             return self.openDir(sub_path, open_dir_options) catch |err| switch (err) {
                 error.FileNotFound => {
@@ -1326,14 +1346,15 @@ pub fn realpathZ(self: Dir, pathname: [*:0]const u8, out_buffer: []u8) RealPathE
 pub fn realpathW(self: Dir, pathname: []const u16, out_buffer: []u8) RealPathError![]u8 {
     const w = windows;
 
-    const access_mask = w.GENERIC_READ | w.SYNCHRONIZE;
-    const share_access = w.FILE_SHARE_READ | w.FILE_SHARE_WRITE | w.FILE_SHARE_DELETE;
     const creation = w.FILE_OPEN;
     const h_file = blk: {
         const res = w.OpenFile(pathname, .{
             .dir = self.fd,
-            .access_mask = access_mask,
-            .share_access = share_access,
+            .access_mask = .{
+                .GENERIC = .{ .READ = true },
+                .SYNCHRONIZE = true,
+            },
+            .share_access = .{},
             .creation = creation,
             .filter = .any,
         }) catch |err| switch (err) {
@@ -1535,10 +1556,16 @@ pub fn openDirZ(self: Dir, sub_path_c: [*:0]const u8, args: OpenOptions) OpenErr
 pub fn openDirW(self: Dir, sub_path_w: [*:0]const u16, args: OpenOptions) OpenError!Dir {
     const w = windows;
     // TODO remove some of these flags if args.access_sub_paths is false
-    const base_flags = w.STANDARD_RIGHTS_READ | w.FILE_READ_ATTRIBUTES | w.FILE_READ_EA |
-        w.SYNCHRONIZE | w.FILE_TRAVERSE;
-    const flags: u32 = if (args.iterate) base_flags | w.FILE_LIST_DIRECTORY else base_flags;
-    const dir = self.makeOpenDirAccessMaskW(sub_path_w, flags, .{
+    const dir = self.makeOpenDirAccessMaskW(sub_path_w, .{
+        .STANDARD = w.ACCESS_MASK.STANDARD.READ,
+        .SPECIFIC = .{ .DIRECTORY = .{
+            .READ_ATTRIBUTES = true,
+            .READ_EA = true,
+            .TRAVERSE = true,
+            .LIST = args.iterate,
+        } },
+        .SYNCHRONIZE = true,
+    }, .{
         .no_follow = args.no_follow,
         .create_disposition = w.FILE_OPEN,
     }) catch |err| switch (err) {
@@ -1573,7 +1600,12 @@ const MakeOpenDirAccessMaskWOptions = struct {
     create_disposition: u32,
 };
 
-fn makeOpenDirAccessMaskW(self: Dir, sub_path_w: [*:0]const u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions) (MakeError || OpenError)!Dir {
+fn makeOpenDirAccessMaskW(
+    self: Dir,
+    sub_path_w: [*:0]const u16,
+    access_mask: windows.ACCESS_MASK,
+    flags: MakeOpenDirAccessMaskWOptions,
+) (MakeError || OpenError)!Dir {
     const w = windows;
 
     var result = Dir{
@@ -1603,7 +1635,7 @@ fn makeOpenDirAccessMaskW(self: Dir, sub_path_w: [*:0]const u16, access_mask: u3
         &io,
         null,
         w.FILE_ATTRIBUTE_NORMAL,
-        w.FILE_SHARE_READ | w.FILE_SHARE_WRITE | w.FILE_SHARE_DELETE,
+        .{},
         flags.create_disposition,
         w.FILE_DIRECTORY_FILE | w.FILE_SYNCHRONOUS_IO_NONALERT | w.FILE_OPEN_FOR_BACKUP_INTENT | open_reparse_point,
         null,

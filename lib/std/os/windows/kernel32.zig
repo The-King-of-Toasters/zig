@@ -1,6 +1,7 @@
 const std = @import("../../std.zig");
 const windows = std.os.windows;
 
+const ACCESS_MASK = windows.ACCESS_MASK;
 const BOOL = windows.BOOL;
 const BOOLEAN = windows.BOOLEAN;
 const CONDITION_VARIABLE = windows.CONDITION_VARIABLE;
@@ -26,6 +27,7 @@ const LPWSTR = windows.LPWSTR;
 const MODULEENTRY32 = windows.MODULEENTRY32;
 const OVERLAPPED = windows.OVERLAPPED;
 const OVERLAPPED_ENTRY = windows.OVERLAPPED_ENTRY;
+const PIPE = windows.PIPE;
 const PMEMORY_BASIC_INFORMATION = windows.PMEMORY_BASIC_INFORMATION;
 const PROCESS_INFORMATION = windows.PROCESS_INFORMATION;
 const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
@@ -58,7 +60,7 @@ pub extern "kernel32" fn CancelIoEx(
 
 pub extern "kernel32" fn CreateFileW(
     lpFileName: LPCWSTR,
-    dwDesiredAccess: DWORD,
+    dwDesiredAccess: ACCESS_MASK,
     dwShareMode: DWORD,
     lpSecurityAttributes: ?*SECURITY_ATTRIBUTES,
     dwCreationDisposition: DWORD,
@@ -69,8 +71,8 @@ pub extern "kernel32" fn CreateFileW(
 // TODO A bunch of logic around NtCreateNamedPipe
 pub extern "kernel32" fn CreateNamedPipeW(
     lpName: LPCWSTR,
-    dwOpenMode: DWORD,
-    dwPipeMode: DWORD,
+    dwOpenMode: PIPE.OPEN_MODE,
+    dwPipeMode: PIPE.MODE,
     nMaxInstances: DWORD,
     nOutBufferSize: DWORD,
     nInBufferSize: DWORD,
@@ -179,7 +181,7 @@ pub extern "kernel32" fn CreateEventExW(
     lpEventAttributes: ?*SECURITY_ATTRIBUTES,
     lpName: ?LPCWSTR,
     dwFlags: DWORD,
-    dwDesiredAccess: DWORD,
+    dwDesiredAccess: ACCESS_MASK,
 ) callconv(WINAPI) ?HANDLE;
 
 // TODO: Wrapper around GetStdHandle + NtDuplicateObject.
@@ -188,7 +190,7 @@ pub extern "kernel32" fn DuplicateHandle(
     hSourceHandle: HANDLE,
     hTargetProcessHandle: HANDLE,
     lpTargetHandle: *HANDLE,
-    dwDesiredAccess: DWORD,
+    dwDesiredAccess: ACCESS_MASK,
     bInheritHandle: BOOL,
     dwOptions: DWORD,
 ) callconv(WINAPI) BOOL;

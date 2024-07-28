@@ -50,7 +50,7 @@ pub const OpenFileOptions = struct {
     access_mask: ACCESS_MASK,
     dir: ?HANDLE = null,
     sa: ?*SECURITY_ATTRIBUTES = null,
-    share_access: ULONG = FILE_SHARE_WRITE | FILE_SHARE_READ | FILE_SHARE_DELETE,
+    share_access: FILE.SHARE = .{},
     creation: ULONG,
     /// If true, tries to open path as a directory.
     /// Defaults to false.
@@ -216,12 +216,18 @@ pub fn CreatePipe(rd: *HANDLE, wr: *HANDLE, sattr: *const SECURITY_ATTRIBUTES) C
         var handle: HANDLE = undefined;
         switch (ntdll.NtCreateFile(
             &handle,
-            GENERIC_READ | SYNCHRONIZE,
+            .{
+                .GENERIC = .{
+                    .READ = true,
+                },
+                .SYNCHRONIZE = true,
+            },
+            //GENERIC_READ | SYNCHRONIZE,
             @constCast(&attrs),
             &iosb,
             null,
             0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            .{},
             FILE_OPEN,
             FILE_SYNCHRONOUS_IO_NONALERT,
             null,
@@ -256,10 +262,14 @@ pub fn CreatePipe(rd: *HANDLE, wr: *HANDLE, sattr: *const SECURITY_ATTRIBUTES) C
     var read: HANDLE = undefined;
     switch (ntdll.NtCreateNamedPipeFile(
         &read,
-        GENERIC_READ | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+        .{
+            .GENERIC = .{ .READ = true },
+            .SPECIFIC = .{ .PIPE = .{ .WRITE_ATTRIBUTES = true } },
+            .SYNCHRONIZE = true,
+        },
         &attrs,
         &iosb,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        .{ .DELETE = false },
         FILE_CREATE,
         FILE_SYNCHRONOUS_IO_NONALERT,
         FILE_PIPE_BYTE_STREAM_TYPE,
@@ -282,12 +292,16 @@ pub fn CreatePipe(rd: *HANDLE, wr: *HANDLE, sattr: *const SECURITY_ATTRIBUTES) C
     var write: HANDLE = undefined;
     switch (ntdll.NtCreateFile(
         &write,
-        GENERIC_WRITE | SYNCHRONIZE | FILE_READ_ATTRIBUTES,
+        .{
+            .GENERIC = .{ .WRITE = true },
+            .SYNCHRONIZE = true,
+            .SPECIFIC = .{ .PIPE = .{ .READ_ATTRIBUTES = true } },
+        },
         &attrs,
         &iosb,
         null,
         0,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        .{},
         FILE_OPEN,
         FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE,
         null,
@@ -787,7 +801,10 @@ pub fn CreateSymbolicLink(
     };
 
     const symlink_handle = OpenFile(sym_link_path, .{
-        .access_mask = SYNCHRONIZE | GENERIC_READ | GENERIC_WRITE,
+        .access_mask = .{
+            .SYNCHRONIZE = true,
+            .GENERIC = .{ .READ = true, .WRITE = true },
+        },
         .dir = dir,
         .creation = FILE_CREATE,
         .filter = if (is_directory) .dir_only else .file_only,
@@ -891,12 +908,15 @@ pub fn ReadLink(dir: ?HANDLE, sub_path_w: []const u16, out_buffer: []u8) ReadLin
 
     const rc = ntdll.NtCreateFile(
         &result_handle,
-        FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+        .{
+            .SPECIFIC = .{ .FILE = .{ .READ_ATTRIBUTES = true } },
+            .SYNCHRONIZE = true,
+        },
         &attr,
         &io,
         null,
         FILE_ATTRIBUTE_NORMAL,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        .{},
         FILE_OPEN,
         FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
         null,
@@ -1020,12 +1040,15 @@ pub fn DeleteFile(sub_path_w: []const u16, options: DeleteFileOptions) DeleteFil
     var tmp_handle: HANDLE = undefined;
     var rc = ntdll.NtCreateFile(
         &tmp_handle,
-        SYNCHRONIZE | DELETE,
+        .{
+            .SYNCHRONIZE = true,
+            .STANDARD = .{ .DELETE = true },
+        },
         &attr,
         &io,
         null,
         0,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        .{},
         FILE_OPEN,
         create_options_flags,
         null,
@@ -1321,8 +1344,8 @@ pub fn GetFinalPathNameByHandle(
             // This is the NT namespaced version of \\.\MountPointManager
             const mgmt_path_u16 = std.unicode.utf8ToUtf16LeStringLiteral("\\??\\MountPointManager");
             const mgmt_handle = OpenFile(mgmt_path_u16, .{
-                .access_mask = SYNCHRONIZE,
-                .share_access = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                .access_mask = .{ .SYNCHRONIZE = true },
+                .share_access = .{},
                 .creation = FILE_OPEN,
             }) catch |err| switch (err) {
                 error.IsDir => return error.Unexpected,
@@ -3312,38 +3335,521 @@ pub const SECURITY_ATTRIBUTES = extern struct {
     bInheritHandle: BOOL = FALSE,
 };
 
-pub const PIPE_ACCESS_INBOUND = 0x00000001;
-pub const PIPE_ACCESS_OUTBOUND = 0x00000002;
-pub const PIPE_ACCESS_DUPLEX = 0x00000003;
+pub const ACCESS_MASK = packed struct(DWORD) {
+    SPECIFIC: SPECIFIC = @bitCast(@as(u16, 0)),
+    STANDARD: STANDARD = .{},
+    SYNCHRONIZE: bool = false,
+    SpareBits1: u3 = 0,
+    SYSTEM_SECURITY: bool = false,
+    MAXIMUM_ALLOWED: bool = false,
+    SpareBits2: u2 = 0,
+    GENERIC: GENERIC = .{},
 
-pub const PIPE_TYPE_BYTE = 0x00000000;
-pub const PIPE_TYPE_MESSAGE = 0x00000004;
+    pub const SPECIFIC = packed union {
+        TOKEN: SPECIFIC.TOKEN,
+        EVENT: SPECIFIC.EVENT,
+        SEMAPHORE: SPECIFIC.SEMAPHORE,
+        MUTANT: SPECIFIC.MUTANT,
+        JOB_OBJECT: SPECIFIC.JOB_OBJECT,
+        TIMER: SPECIFIC.TIMER,
+        PROCESS: SPECIFIC.PROCESS,
+        THREAD: SPECIFIC.THREAD,
+        SECTION: SPECIFIC.SECTION,
+        FILE: SPECIFIC.FILE,
+        DIRECTORY: SPECIFIC.DIRECTORY,
+        PIPE: SPECIFIC.PIPE,
+        KEY: SPECIFIC.KEY,
 
-pub const PIPE_READMODE_BYTE = 0x00000000;
-pub const PIPE_READMODE_MESSAGE = 0x00000002;
+        pub const TOKEN = packed struct(u16) {
+            ASSIGN_PRIMARY: bool = false,
+            DUPLICATE: bool = false,
+            IMPERSONATE: bool = false,
+            QUERY: bool = false,
+            QUERY_SOURCE: bool = false,
+            ADJUST_PRIVILEGES: bool = false,
+            ADJUST_GROUPS: bool = false,
+            ADJUST_DEFAULT: bool = false,
+            ADJUST_SESSIONID: bool = false,
+            SpareBits1: u7 = 0,
 
-pub const PIPE_WAIT = 0x00000000;
-pub const PIPE_NOWAIT = 0x00000001;
+            pub const EXECUTE: ACCESS_MASK = .{
+                .SPECIFIC = .{ .TOKEN = .{} },
+                .STANDARD = STANDARD.EXECUTE,
+            };
+            pub const READ: ACCESS_MASK = .{
+                .SPECIFIC = .{ .TOKEN = .{
+                    .QUERY = true,
+                } },
+                .STANDARD = STANDARD.READ,
+            };
+            pub const WRITE: ACCESS_MASK = .{
+                .SPECIFIC = .{ .TOKEN = .{
+                    .ADJUST_PRIVILEGES = true,
+                    .ADJUST_GROUPS = true,
+                    .ADJUST_DEFAULT = true,
+                } },
+                .STANDARD = STANDARD.WRITE,
+            };
 
-pub const GENERIC_READ = 0x80000000;
-pub const GENERIC_WRITE = 0x40000000;
-pub const GENERIC_EXECUTE = 0x20000000;
-pub const GENERIC_ALL = 0x10000000;
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .TOKEN = .{
+                    .ASSIGN_PRIMARY = true,
+                    .DUPLICATE = true,
+                    .IMPERSONATE = true,
+                    .QUERY = true,
+                    .QUERY_SOURCE = true,
+                    .ADJUST_PRIVILEGES = true,
+                    .ADJUST_GROUPS = true,
+                    .ADJUST_DEFAULT = true,
+                    .ADJUST_SESSIONID = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+            };
+        };
 
-pub const FILE_SHARE_DELETE = 0x00000004;
-pub const FILE_SHARE_READ = 0x00000001;
-pub const FILE_SHARE_WRITE = 0x00000002;
+        pub const EVENT = packed struct(u16) {
+            QUERY_STATE: bool = false,
+            MODIFY_STATE: bool = false,
+            SpareBits1: u14 = 0,
 
-pub const DELETE = 0x00010000;
-pub const READ_CONTROL = 0x00020000;
-pub const WRITE_DAC = 0x00040000;
-pub const WRITE_OWNER = 0x00080000;
-pub const SYNCHRONIZE = 0x00100000;
-pub const STANDARD_RIGHTS_READ = READ_CONTROL;
-pub const STANDARD_RIGHTS_WRITE = READ_CONTROL;
-pub const STANDARD_RIGHTS_EXECUTE = READ_CONTROL;
-pub const STANDARD_RIGHTS_REQUIRED = DELETE | READ_CONTROL | WRITE_DAC | WRITE_OWNER;
-pub const MAXIMUM_ALLOWED = 0x02000000;
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .EVENT = .{
+                    .QUERY_STATE = true,
+                    .MODIFY_STATE = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const SEMAPHORE = packed struct(u16) {
+            QUERY_STATE: bool = false,
+            MODIFY_STATE: bool = false,
+            SpareBits1: u14 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .SEMAPHORE = .{
+                    .QUERY_STATE = true,
+                    .MODIFY_STATE = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const MUTANT = packed struct(u16) {
+            QUERY_STATE: bool = false,
+            SpareBits1: u15 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .MUTANT = .{
+                    .QUERY_STATE = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const JOB_OBJECT = packed struct(u16) {
+            ASSIGN_PROCESS: bool = false,
+            SET_ATTRIBUTES: bool = false,
+            QUERY: bool = false,
+            TERMINATE: bool = false,
+            SET_SECURITY_ATTRIBUTES: bool = false,
+            IMPERSONATE: bool = false,
+            SpareBits1: u10 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .JOB_OBJECT = .{
+                    .ASSIGN_PROCESS = true,
+                    .SET_ATTRIBUTES = true,
+                    .QUERY = true,
+                    .TERMINATE = true,
+                    .SET_SECURITY_ATTRIBUTES = true,
+                    .IMPERSONATE = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const TIMER = packed struct(u16) {
+            QUERY_STATE: bool = false,
+            MODIFY_STATE: bool = false,
+            SpareBits1: u14 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .TIMER = .{
+                    .QUERY_STATE = true,
+                    .MODIFY_STATE = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const PROCESS = packed struct(u16) {
+            TERMINATE: bool = false,
+            CREATE_THREAD: bool = false,
+            SpareBits1: u1 = 0,
+            VM_OPERATION: bool = false,
+            VM_READ: bool = false,
+            VM_WRITE: bool = false,
+            DUP_HANDLE: bool = false,
+            CREATE_PROCESS: bool = false,
+            SET_QUOTA: bool = false,
+            SET_INFORMATION: bool = false,
+            QUERY_INFORMATION: bool = false,
+            SUSPEND_RESUME: bool = false,
+            QUERY_LIMITED_INFORMATION: bool = false,
+            SET_LIMITED_INFORMATION: bool = false,
+            SpareBits2: u2 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .PROCESS = .{
+                    .TERMINATE = true,
+                    .CREATE_THREAD = true,
+                    .SpareBits1 = maxInt(std.meta.FieldType(SPECIFIC.PROCESS, "SpareBits1")),
+                    .VM_OPERATION = true,
+                    .VM_READ = true,
+                    .VM_WRITE = true,
+                    .DUP_HANDLE = true,
+                    .CREATE_PROCESS = true,
+                    .SET_QUOTA = true,
+                    .SET_INFORMATION = true,
+                    .QUERY_INFORMATION = true,
+                    .SUSPEND_RESUME = true,
+                    .QUERY_LIMITED_INFORMATION = true,
+                    .SET_LIMITED_INFORMATION = true,
+                    .SpareBits2 = maxInt(std.meta.FieldType(SPECIFIC.PROCESS, "SpareBits2")),
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const THREAD = packed struct(u16) {
+            TERMINATE: bool = false,
+            SUSPEND_RESUME: bool = false,
+            SpareBits1: u1 = 0,
+            GET_CONTEXT: bool = false,
+            SET_CONTEXT: bool = false,
+            SET_INFORMATION: bool = false,
+            QUERY_INFORMATION: bool = false,
+            SET_THREAD_TOKEN: bool = false,
+            IMPERSONATE: bool = false,
+            DIRECT_IMPERSONATION: bool = false,
+            SET_LIMITED_INFORMATION: bool = false,
+            QUERY_LIMITED_INFORMATION: bool = false,
+            RESUME: bool = false,
+            SpareBits2: u3 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .THREAD = .{
+                    .TERMINATE = true,
+                    .SUSPEND_RESUME = true,
+                    .SpareBits1 = maxInt(std.meta.FieldType(SPECIFIC.THREAD, "SpareBits1")),
+                    .GET_CONTEXT = true,
+                    .SET_CONTEXT = true,
+                    .SET_INFORMATION = true,
+                    .QUERY_INFORMATION = true,
+                    .SET_THREAD_TOKEN = true,
+                    .IMPERSONATE = true,
+                    .DIRECT_IMPERSONATION = true,
+                    .SET_LIMITED_INFORMATION = true,
+                    .QUERY_LIMITED_INFORMATION = true,
+                    .RESUME = true,
+                    .SpareBits2 = maxInt(std.meta.FieldType(SPECIFIC.THREAD, "SpareBits2")),
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const SECTION = packed struct(u16) {
+            QUERY: bool = false,
+            MAP_WRITE: bool = false,
+            MAP_READ: bool = false,
+            MAP_EXECUTE: bool = false,
+            EXTEND_SIZE: bool = false,
+            MAP_EXECUTE_EXPLICIT: bool = false,
+            SpareBits1: u10 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .SECTION = .{
+                    .QUERY = true,
+                    .MAP_WRITE = true,
+                    .MAP_READ = true,
+                    .MAP_EXECUTE = true,
+                    .EXTEND_SIZE = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+            };
+        };
+
+        pub const FILE = packed struct(u16) {
+            READ_DATA: bool = false,
+            WRITE_DATA: bool = false,
+            APPEND_DATA: bool = false,
+            READ_EA: bool = false,
+            WRITE_EA: bool = false,
+            EXECUTE: bool = false,
+            SpareBits1: u1 = 0,
+            READ_ATTRIBUTES: bool = false,
+            WRITE_ATTRIBUTES: bool = false,
+            SpareBits2: u7 = 0,
+
+            pub const READ: ACCESS_MASK = .{
+                .SPECIFIC = .{ .FILE = .{
+                    .READ_DATA = true,
+                    .READ_EA = true,
+                    .READ_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.READ,
+                .SYNCHRONIZE = true,
+            };
+            pub const WRITE: ACCESS_MASK = .{
+                .SPECIFIC = .{ .FILE = .{
+                    .WRITE_DATA = true,
+                    .APPEND_DATA = true,
+                    .WRITE_EA = true,
+                    .WRITE_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.WRITE,
+                .SYNCHRONIZE = true,
+            };
+            pub const EXECUTE: ACCESS_MASK = .{
+                .SPECIFIC = .{ .FILE = .{
+                    .EXECUTE = true,
+                    .READ_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.EXECUTE,
+                .SYNCHRONIZE = true,
+            };
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .FILE = .{
+                    .READ_DATA = true,
+                    .WRITE_DATA = true,
+                    .APPEND_DATA = true,
+                    .READ_EA = true,
+                    .WRITE_EA = true,
+                    .EXECUTE = true,
+                    .SpareBits1 = maxInt(std.meta.FieldType(SPECIFIC.FILE, "SpareBits1")),
+                    .READ_ATTRIBUTES = true,
+                    .WRITE_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const DIRECTORY = packed struct(u16) {
+            LIST: bool = false,
+            ADD_FILE: bool = false,
+            ADD_SUBDIRECTORY: bool = false,
+            READ_EA: bool = false,
+            WRITE_EA: bool = false,
+            TRAVERSE: bool = false,
+            DELETE_CHILD: bool = false,
+            READ_ATTRIBUTES: bool = false,
+            WRITE_ATTRIBUTES: bool = false,
+            SpareBits1: u7 = 0,
+
+            pub const READ: ACCESS_MASK = .{
+                .SPECIFIC = .{ .DIRECTORY = .{
+                    .LIST = true,
+                    .READ_EA = true,
+                    .READ_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.READ,
+                .SYNCHRONIZE = true,
+            };
+            pub const WRITE: ACCESS_MASK = .{
+                .SPECIFIC = .{ .DIRECTORY = .{
+                    .ADD_FILE = true,
+                    .ADD_SUBDIRECTORY = true,
+                    .WRITE_EA = true,
+                    .WRITE_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.WRITE,
+                .SYNCHRONIZE = true,
+            };
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .DIRECTORY = .{
+                    .LIST = true,
+                    .ADD_FILE = true,
+                    .ADD_SUBDIRECTORY = true,
+                    .READ_EA = true,
+                    .WRITE_EA = true,
+                    .TRAVERSE = true,
+                    .DELETE_CHILD = true,
+                    .READ_ATTRIBUTES = true,
+                    .WRITE_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const PIPE = packed struct(u16) {
+            READ_DATA: bool = false,
+            WRITE_DATA: bool = false,
+            CREATE_INSTANCE: bool = false,
+            SpareBits1: u4 = 0,
+            READ_ATTRIBUTES: bool = false,
+            WRITE_ATTRIBUTES: bool = false,
+            SpareBits2: u7 = 0,
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .PIPE = .{
+                    .READ_DATA = true,
+                    .WRITE_DATA = true,
+                    .CREATE_INSTANCE = true,
+                    .SpareBits1 = maxInt(std.meta.FieldType(SPECIFIC.PIPE, "SpareBits1")),
+                    .READ_ATTRIBUTES = true,
+                    .WRITE_ATTRIBUTES = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = true,
+            };
+        };
+
+        pub const KEY = packed struct(u16) {
+            QUERY_VALUE: bool = false,
+            SET_VALUE: bool = false,
+            CREATE_SUB_KEY: bool = false,
+            ENUMERATE_SUB_KEYS: bool = false,
+            NOTIFY: bool = false,
+            CREATE_LINK: bool = false,
+            SpareBits1: u2 = 0,
+            WOW64_64KEY: bool = false,
+            WOW64_32KEY: bool = false,
+            WOW64_RES: bool = false,
+            SpareBits2: u5 = 0,
+
+            pub const READ: ACCESS_MASK = .{
+                .SPECIFIC = .{ .KEY = .{
+                    .QUERY_VALUE = true,
+                    .ENUMERATE_SUB_KEYS = true,
+                    .NOTIFY = true,
+                } },
+                .STANDARD = STANDARD.READ,
+                .SYNCHRONIZE = false,
+            };
+            pub const WRITE: ACCESS_MASK = .{
+                .SPECIFIC = .{ .KEY = .{
+                    .SET_VALUE = true,
+                    .CREATE_SUB_KEY = true,
+                } },
+                .STANDARD = STANDARD.WRITE,
+                .SYNCHRONIZE = false,
+            };
+            pub const EXECUTE: ACCESS_MASK = .{
+                .SPECIFIC = .{ .KEY = .{
+                    .QUERY_VALUE = true,
+                    .ENUMERATE_SUB_KEYS = true,
+                    .NOTIFY = true,
+                } },
+                .STANDARD = STANDARD.EXECUTE,
+                .SYNCHRONIZE = false,
+            };
+
+            pub const ALL: ACCESS_MASK = .{
+                .SPECIFIC = .{ .KEY = .{
+                    .QUERY_VALUE = true,
+                    .SET_VALUE = true,
+                    .CREATE_SUB_KEY = true,
+                    .ENUMERATE_SUB_KEYS = true,
+                    .NOTIFY = true,
+                    .CREATE_LINK = true,
+                } },
+                .STANDARD = STANDARD.REQUIRED,
+                .SYNCHRONIZE = false,
+            };
+        };
+
+        pub const ALL: SPECIFIC = @bitCast(@as(u16, maxInt(u16)));
+    };
+
+    pub const STANDARD = packed struct(u4) {
+        DELETE: bool = false,
+        READ_CONTROL: bool = false,
+        WRITE_DAC: bool = false,
+        WRITE_OWNER: bool = false,
+
+        pub const REQUIRED: STANDARD = .{
+            .DELETE = true,
+            .READ_CONTROL = true,
+            .WRITE_DAC = true,
+            .WRITE_OWNER = true,
+        };
+
+        pub const READ: STANDARD = .{
+            .READ_CONTROL = true,
+        };
+        pub const WRITE: STANDARD = .{
+            .READ_CONTROL = true,
+        };
+        pub const EXECUTE: STANDARD = .{
+            .READ_CONTROL = true,
+        };
+
+        pub const ALL: ACCESS_MASK = .{
+            .STANDARD = .{
+                .DELETE = true,
+                .READ_CONTROL = true,
+                .WRITE_DAC = true,
+                .WRITE_OWNER = true,
+            },
+            .SYNCHRONIZE = true,
+        };
+    };
+
+    pub const GENERIC = packed struct(u4) {
+        ALL: bool = false,
+        EXECUTE: bool = false,
+        WRITE: bool = false,
+        READ: bool = false,
+    };
+};
+
+pub const FILE = struct {
+    pub const SHARE = packed struct(DWORD) {
+        READ: bool = true,
+        WRITE: bool = true,
+        DELETE: bool = true,
+        SpareBits1: u29 = 0,
+    };
+};
+
+pub const PIPE = struct {
+    pub const OPEN_MODE = packed struct(DWORD) {
+        ACCESS: enum(u2) {
+            INBOUND = 1,
+            OUTBOUND = 2,
+            DUPLEX = 3,
+        },
+        SpareBits1: u16 = 0,
+        WRITE_DAC: bool = false,
+        WRITE_OWNER: bool = false,
+        SpareBits2: u4 = 0,
+        ACCESS_SYSTEM_SECURITY: bool = false,
+        SpareBits3: u5 = 0,
+        OVERLAPPED: bool = false,
+        WRITE_THROUGH: bool = false,
+    };
+
+    pub const MODE = packed struct(DWORD) {
+        NOWAIT: bool = false,
+        READMODE: TYPE = .BYTE,
+        TYPE: TYPE = .BYTE,
+        SpareBits1: u29 = 0,
+
+        pub const TYPE = enum(u1) { BYTE, MESSAGE };
+    };
+};
 
 // disposition for NtCreateFile
 pub const FILE_SUPERSEDE = 0;
@@ -3353,22 +3859,6 @@ pub const FILE_OPEN_IF = 3;
 pub const FILE_OVERWRITE = 4;
 pub const FILE_OVERWRITE_IF = 5;
 pub const FILE_MAXIMUM_DISPOSITION = 5;
-
-// flags for NtCreateFile and NtOpenFile
-pub const FILE_READ_DATA = 0x00000001;
-pub const FILE_LIST_DIRECTORY = 0x00000001;
-pub const FILE_WRITE_DATA = 0x00000002;
-pub const FILE_ADD_FILE = 0x00000002;
-pub const FILE_APPEND_DATA = 0x00000004;
-pub const FILE_ADD_SUBDIRECTORY = 0x00000004;
-pub const FILE_CREATE_PIPE_INSTANCE = 0x00000004;
-pub const FILE_READ_EA = 0x00000008;
-pub const FILE_WRITE_EA = 0x00000010;
-pub const FILE_EXECUTE = 0x00000020;
-pub const FILE_TRAVERSE = 0x00000020;
-pub const FILE_DELETE_CHILD = 0x00000040;
-pub const FILE_READ_ATTRIBUTES = 0x00000080;
-pub const FILE_WRITE_ATTRIBUTES = 0x00000100;
 
 pub const FILE_DIRECTORY_FILE = 0x00000001;
 pub const FILE_WRITE_THROUGH = 0x00000002;
@@ -3417,11 +3907,6 @@ pub const FILE_ATTRIBUTE_SYSTEM = 0x4;
 pub const FILE_ATTRIBUTE_TEMPORARY = 0x100;
 pub const FILE_ATTRIBUTE_VIRTUAL = 0x10000;
 
-pub const FILE_ALL_ACCESS = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x1ff;
-pub const FILE_GENERIC_READ = STANDARD_RIGHTS_READ | FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_READ_EA | SYNCHRONIZE;
-pub const FILE_GENERIC_WRITE = STANDARD_RIGHTS_WRITE | FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | FILE_APPEND_DATA | SYNCHRONIZE;
-pub const FILE_GENERIC_EXECUTE = STANDARD_RIGHTS_EXECUTE | FILE_READ_ATTRIBUTES | FILE_EXECUTE | SYNCHRONIZE;
-
 // Flags for NtCreateNamedPipeFile
 // NamedPipeType
 pub const FILE_PIPE_BYTE_STREAM_TYPE = 0x0;
@@ -3439,9 +3924,6 @@ pub const FILE_PIPE_MESSAGE_MODE = 0x1;
 // flags for CreateEvent
 pub const CREATE_EVENT_INITIAL_SET = 0x00000002;
 pub const CREATE_EVENT_MANUAL_RESET = 0x00000001;
-
-pub const EVENT_ALL_ACCESS = 0x1F0003;
-pub const EVENT_MODIFY_STATE = 0x0002;
 
 // MEMORY_BASIC_INFORMATION.Type flags for VirtualQuery
 pub const MEM_IMAGE = 0x1000000;
@@ -3735,26 +4217,12 @@ pub const PIMAGE_TLS_CALLBACK = ?*const fn (PVOID, DWORD, PVOID) callconv(.C) vo
 pub const PROV_RSA_FULL = 1;
 
 pub const REGSAM = ACCESS_MASK;
-pub const ACCESS_MASK = DWORD;
 pub const LSTATUS = LONG;
 
 pub const SECTION_INHERIT = enum(c_int) {
     ViewShare = 0,
     ViewUnmap = 1,
 };
-
-pub const SECTION_QUERY = 0x0001;
-pub const SECTION_MAP_WRITE = 0x0002;
-pub const SECTION_MAP_READ = 0x0004;
-pub const SECTION_MAP_EXECUTE = 0x0008;
-pub const SECTION_EXTEND_SIZE = 0x0010;
-pub const SECTION_ALL_ACCESS =
-    STANDARD_RIGHTS_REQUIRED |
-    SECTION_QUERY |
-    SECTION_MAP_WRITE |
-    SECTION_MAP_READ |
-    SECTION_MAP_EXECUTE |
-    SECTION_EXTEND_SIZE;
 
 pub const SEC_64K_PAGES = 0x80000;
 pub const SEC_FILE = 0x800000;
@@ -3779,34 +4247,6 @@ pub const HKEY_PERFORMANCE_NLSTEXT: HKEY = @ptrFromInt(0x80000060);
 pub const HKEY_CURRENT_CONFIG: HKEY = @ptrFromInt(0x80000005);
 pub const HKEY_DYN_DATA: HKEY = @ptrFromInt(0x80000006);
 pub const HKEY_CURRENT_USER_LOCAL_SETTINGS: HKEY = @ptrFromInt(0x80000007);
-
-/// Combines the STANDARD_RIGHTS_REQUIRED, KEY_QUERY_VALUE, KEY_SET_VALUE, KEY_CREATE_SUB_KEY,
-/// KEY_ENUMERATE_SUB_KEYS, KEY_NOTIFY, and KEY_CREATE_LINK access rights.
-pub const KEY_ALL_ACCESS = 0xF003F;
-/// Reserved for system use.
-pub const KEY_CREATE_LINK = 0x0020;
-/// Required to create a subkey of a registry key.
-pub const KEY_CREATE_SUB_KEY = 0x0004;
-/// Required to enumerate the subkeys of a registry key.
-pub const KEY_ENUMERATE_SUB_KEYS = 0x0008;
-/// Equivalent to KEY_READ.
-pub const KEY_EXECUTE = 0x20019;
-/// Required to request change notifications for a registry key or for subkeys of a registry key.
-pub const KEY_NOTIFY = 0x0010;
-/// Required to query the values of a registry key.
-pub const KEY_QUERY_VALUE = 0x0001;
-/// Combines the STANDARD_RIGHTS_READ, KEY_QUERY_VALUE, KEY_ENUMERATE_SUB_KEYS, and KEY_NOTIFY values.
-pub const KEY_READ = 0x20019;
-/// Required to create, delete, or set a registry value.
-pub const KEY_SET_VALUE = 0x0002;
-/// Indicates that an application on 64-bit Windows should operate on the 32-bit registry view.
-/// This flag is ignored by 32-bit Windows.
-pub const KEY_WOW64_32KEY = 0x0200;
-/// Indicates that an application on 64-bit Windows should operate on the 64-bit registry view.
-/// This flag is ignored by 32-bit Windows.
-pub const KEY_WOW64_64KEY = 0x0100;
-/// Combines the STANDARD_RIGHTS_WRITE, KEY_SET_VALUE, and KEY_CREATE_SUB_KEY access rights.
-pub const KEY_WRITE = 0x20006;
 
 /// Open symbolic link.
 pub const REG_OPTION_OPEN_LINK: DWORD = 0x8;

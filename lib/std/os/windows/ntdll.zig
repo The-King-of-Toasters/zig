@@ -1,42 +1,44 @@
 const std = @import("../../std.zig");
 const windows = std.os.windows;
 
+const ACCESS_MASK = windows.ACCESS_MASK;
 const BOOL = windows.BOOL;
+const BOOLEAN = windows.BOOLEAN;
+const CONTEXT = windows.CONTEXT;
+const CURDIR = windows.CURDIR;
 const DWORD = windows.DWORD;
 const DWORD64 = windows.DWORD64;
-const ULONG = windows.ULONG;
-const WINAPI = windows.WINAPI;
-const NTSTATUS = windows.NTSTATUS;
-const WORD = windows.WORD;
-const HANDLE = windows.HANDLE;
-const ACCESS_MASK = windows.ACCESS_MASK;
-const IO_APC_ROUTINE = windows.IO_APC_ROUTINE;
-const BOOLEAN = windows.BOOLEAN;
-const OBJECT_ATTRIBUTES = windows.OBJECT_ATTRIBUTES;
-const PVOID = windows.PVOID;
-const IO_STATUS_BLOCK = windows.IO_STATUS_BLOCK;
-const LARGE_INTEGER = windows.LARGE_INTEGER;
-const OBJECT_INFORMATION_CLASS = windows.OBJECT_INFORMATION_CLASS;
+const EXCEPTION_ROUTINE = windows.EXCEPTION_ROUTINE;
+const FILE = windows.FILE;
+const FILE_BASIC_INFORMATION = windows.FILE_BASIC_INFORMATION;
 const FILE_INFORMATION_CLASS = windows.FILE_INFORMATION_CLASS;
 const FS_INFORMATION_CLASS = windows.FS_INFORMATION_CLASS;
-const UNICODE_STRING = windows.UNICODE_STRING;
-const RTL_OSVERSIONINFOW = windows.RTL_OSVERSIONINFOW;
-const FILE_BASIC_INFORMATION = windows.FILE_BASIC_INFORMATION;
-const SIZE_T = windows.SIZE_T;
-const CURDIR = windows.CURDIR;
-const PCWSTR = windows.PCWSTR;
-const RTL_QUERY_REGISTRY_TABLE = windows.RTL_QUERY_REGISTRY_TABLE;
-const CONTEXT = windows.CONTEXT;
-const UNWIND_HISTORY_TABLE = windows.UNWIND_HISTORY_TABLE;
-const RUNTIME_FUNCTION = windows.RUNTIME_FUNCTION;
+const HANDLE = windows.HANDLE;
+const IO_APC_ROUTINE = windows.IO_APC_ROUTINE;
+const IO_STATUS_BLOCK = windows.IO_STATUS_BLOCK;
 const KNONVOLATILE_CONTEXT_POINTERS = windows.KNONVOLATILE_CONTEXT_POINTERS;
-const EXCEPTION_ROUTINE = windows.EXCEPTION_ROUTINE;
+const LARGE_INTEGER = windows.LARGE_INTEGER;
+const LPCVOID = windows.LPCVOID;
+const LPVOID = windows.LPVOID;
+const NTSTATUS = windows.NTSTATUS;
+const OBJECT_ATTRIBUTES = windows.OBJECT_ATTRIBUTES;
+const OBJECT_INFORMATION_CLASS = windows.OBJECT_INFORMATION_CLASS;
+const PCWSTR = windows.PCWSTR;
+const PROCESSINFOCLASS = windows.PROCESSINFOCLASS;
+const PVOID = windows.PVOID;
+const RTL_OSVERSIONINFOW = windows.RTL_OSVERSIONINFOW;
+const RTL_QUERY_REGISTRY_TABLE = windows.RTL_QUERY_REGISTRY_TABLE;
+const RTL_USER_PROCESS_PARAMETERS = windows.RTL_USER_PROCESS_PARAMETERS;
+const RUNTIME_FUNCTION = windows.RUNTIME_FUNCTION;
+const SECTION_INHERIT = windows.SECTION_INHERIT;
+const SIZE_T = windows.SIZE_T;
 const SYSTEM_INFORMATION_CLASS = windows.SYSTEM_INFORMATION_CLASS;
 const THREADINFOCLASS = windows.THREADINFOCLASS;
-const PROCESSINFOCLASS = windows.PROCESSINFOCLASS;
-const LPVOID = windows.LPVOID;
-const LPCVOID = windows.LPCVOID;
-const SECTION_INHERIT = windows.SECTION_INHERIT;
+const ULONG = windows.ULONG;
+const UNICODE_STRING = windows.UNICODE_STRING;
+const UNWIND_HISTORY_TABLE = windows.UNWIND_HISTORY_TABLE;
+const WINAPI = windows.WINAPI;
+const WORD = windows.WORD;
 
 pub extern "ntdll" fn NtQueryInformationProcess(
     ProcessHandle: HANDLE,
@@ -127,7 +129,7 @@ pub extern "ntdll" fn NtCreateFile(
     IoStatusBlock: *IO_STATUS_BLOCK,
     AllocationSize: ?*LARGE_INTEGER,
     FileAttributes: ULONG,
-    ShareAccess: ULONG,
+    ShareAccess: FILE.SHARE,
     CreateDisposition: ULONG,
     CreateOptions: ULONG,
     EaBuffer: ?*anyopaque,
@@ -344,10 +346,10 @@ pub extern "ntdll" fn RtlExitUserProcess(
 
 pub extern "ntdll" fn NtCreateNamedPipeFile(
     FileHandle: *HANDLE,
-    DesiredAccess: ULONG,
+    DesiredAccess: ACCESS_MASK,
     ObjectAttributes: *OBJECT_ATTRIBUTES,
     IoStatusBlock: *IO_STATUS_BLOCK,
-    ShareAccess: ULONG,
+    ShareAccess: FILE.SHARE,
     CreateDisposition: ULONG,
     CreateOptions: ULONG,
     NamedPipeType: ULONG,

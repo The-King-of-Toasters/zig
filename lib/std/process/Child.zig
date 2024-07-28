@@ -738,9 +738,15 @@ fn spawnWindows(self: *ChildProcess) SpawnError!void {
 
     const nul_handle = if (any_ignore)
         // "\Device\Null" or "\??\NUL"
-        windows.OpenFile(&[_]u16{ '\\', 'D', 'e', 'v', 'i', 'c', 'e', '\\', 'N', 'u', 'l', 'l' }, .{
-            .access_mask = windows.GENERIC_READ | windows.GENERIC_WRITE | windows.SYNCHRONIZE,
-            .share_access = windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE | windows.FILE_SHARE_DELETE,
+        windows.OpenFile(unicode.utf8ToUtf16LeStringLiteral("\\Device\\Null"), .{
+            .access_mask = .{
+                .GENERIC = .{
+                    .READ = true,
+                    .WRITE = true,
+                },
+                .SYNCHRONIZE = true,
+            },
+            .share_access = .{},
             .sa = &saAttr,
             .creation = windows.OPEN_EXISTING,
         }) catch |err| switch (err) {
@@ -1356,8 +1362,8 @@ fn windowsMakeAsyncPipe(rd: *?windows.HANDLE, wr: *?windows.HANDLE, sattr: *cons
     // Create the read handle that can be used with overlapped IO ops.
     const read_handle = windows.kernel32.CreateNamedPipeW(
         pipe_path.ptr,
-        windows.PIPE_ACCESS_INBOUND | windows.FILE_FLAG_OVERLAPPED,
-        windows.PIPE_TYPE_BYTE,
+        .{ .ACCESS = .INBOUND, .OVERLAPPED = true },
+        .{ .NOWAIT = true },
         1,
         4096,
         4096,
@@ -1374,7 +1380,7 @@ fn windowsMakeAsyncPipe(rd: *?windows.HANDLE, wr: *?windows.HANDLE, sattr: *cons
     var sattr_copy = sattr.*;
     const write_handle = windows.kernel32.CreateFileW(
         pipe_path.ptr,
-        windows.GENERIC_WRITE,
+        .{ .GENERIC = .{ .WRITE = true } },
         0,
         &sattr_copy,
         windows.OPEN_EXISTING,
