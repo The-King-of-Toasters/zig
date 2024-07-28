@@ -217,12 +217,9 @@ pub fn CreatePipe(rd: *HANDLE, wr: *HANDLE, sattr: *const SECURITY_ATTRIBUTES) C
         switch (ntdll.NtCreateFile(
             &handle,
             .{
-                .GENERIC = .{
-                    .READ = true,
-                },
-                .SYNCHRONIZE = true,
+                .STANDARD = .{ .SYNCHRONIZE = true },
+                .GENERIC = .{ .READ = true },
             },
-            //GENERIC_READ | SYNCHRONIZE,
             @constCast(&attrs),
             &iosb,
             null,
@@ -263,9 +260,9 @@ pub fn CreatePipe(rd: *HANDLE, wr: *HANDLE, sattr: *const SECURITY_ATTRIBUTES) C
     switch (ntdll.NtCreateNamedPipeFile(
         &read,
         .{
-            .GENERIC = .{ .READ = true },
             .SPECIFIC = .{ .PIPE = .{ .WRITE_ATTRIBUTES = true } },
-            .SYNCHRONIZE = true,
+            .STANDARD = .{ .SYNCHRONIZE = true },
+            .GENERIC = .{ .READ = true },
         },
         &attrs,
         &iosb,
@@ -293,9 +290,9 @@ pub fn CreatePipe(rd: *HANDLE, wr: *HANDLE, sattr: *const SECURITY_ATTRIBUTES) C
     switch (ntdll.NtCreateFile(
         &write,
         .{
-            .GENERIC = .{ .WRITE = true },
-            .SYNCHRONIZE = true,
             .SPECIFIC = .{ .PIPE = .{ .READ_ATTRIBUTES = true } },
+            .STANDARD = .{ .SYNCHRONIZE = true },
+            .GENERIC = .{ .WRITE = true },
         },
         &attrs,
         &iosb,
@@ -802,8 +799,8 @@ pub fn CreateSymbolicLink(
 
     const symlink_handle = OpenFile(sym_link_path, .{
         .access_mask = .{
-            .SYNCHRONIZE = true,
             .GENERIC = .{ .READ = true, .WRITE = true },
+            .STANDARD = .{ .SYNCHRONIZE = true },
         },
         .dir = dir,
         .creation = FILE_CREATE,
@@ -910,7 +907,7 @@ pub fn ReadLink(dir: ?HANDLE, sub_path_w: []const u16, out_buffer: []u8) ReadLin
         &result_handle,
         .{
             .SPECIFIC = .{ .FILE = .{ .READ_ATTRIBUTES = true } },
-            .SYNCHRONIZE = true,
+            .STANDARD = .{ .SYNCHRONIZE = true },
         },
         &attr,
         &io,
@@ -1041,8 +1038,7 @@ pub fn DeleteFile(sub_path_w: []const u16, options: DeleteFileOptions) DeleteFil
     var rc = ntdll.NtCreateFile(
         &tmp_handle,
         .{
-            .SYNCHRONIZE = true,
-            .STANDARD = .{ .DELETE = true },
+            .STANDARD = .{ .DELETE = true, .SYNCHRONIZE = true },
         },
         &attr,
         &io,
@@ -1344,7 +1340,7 @@ pub fn GetFinalPathNameByHandle(
             // This is the NT namespaced version of \\.\MountPointManager
             const mgmt_path_u16 = std.unicode.utf8ToUtf16LeStringLiteral("\\??\\MountPointManager");
             const mgmt_handle = OpenFile(mgmt_path_u16, .{
-                .access_mask = .{ .SYNCHRONIZE = true },
+                .access_mask = .{ .STANDARD = .{ .SYNCHRONIZE = true } },
                 .share_access = .{},
                 .creation = FILE_OPEN,
             }) catch |err| switch (err) {
@@ -3338,7 +3334,6 @@ pub const SECURITY_ATTRIBUTES = extern struct {
 pub const ACCESS_MASK = packed struct(DWORD) {
     SPECIFIC: SPECIFIC = @bitCast(@as(u16, 0)),
     STANDARD: STANDARD = .{},
-    SYNCHRONIZE: bool = false,
     SpareBits1: u3 = 0,
     SYSTEM_SECURITY: bool = false,
     MAXIMUM_ALLOWED: bool = false,
@@ -3417,8 +3412,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .QUERY_STATE = true,
                     .MODIFY_STATE = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3432,8 +3426,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .QUERY_STATE = true,
                     .MODIFY_STATE = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3445,8 +3438,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                 .SPECIFIC = .{ .MUTANT = .{
                     .QUERY_STATE = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3468,8 +3460,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .SET_SECURITY_ATTRIBUTES = true,
                     .IMPERSONATE = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3483,8 +3474,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .QUERY_STATE = true,
                     .MODIFY_STATE = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3523,8 +3513,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .SET_LIMITED_INFORMATION = true,
                     .SpareBits2 = maxInt(std.meta.FieldType(SPECIFIC.PROCESS, "SpareBits2")),
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3561,8 +3550,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .RESUME = true,
                     .SpareBits2 = maxInt(std.meta.FieldType(SPECIFIC.THREAD, "SpareBits2")),
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3583,7 +3571,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .MAP_EXECUTE = true,
                     .EXTEND_SIZE = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3605,8 +3593,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .READ_EA = true,
                     .READ_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.READ,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
             pub const WRITE: ACCESS_MASK = .{
                 .SPECIFIC = .{ .FILE = .{
@@ -3615,16 +3602,20 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .WRITE_EA = true,
                     .WRITE_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.WRITE,
-                .SYNCHRONIZE = true,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             };
             pub const EXECUTE: ACCESS_MASK = .{
                 .SPECIFIC = .{ .FILE = .{
                     .EXECUTE = true,
                     .READ_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.EXECUTE,
-                .SYNCHRONIZE = true,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             };
 
             pub const ALL: ACCESS_MASK = .{
@@ -3639,8 +3630,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .READ_ATTRIBUTES = true,
                     .WRITE_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3662,8 +3652,10 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .READ_EA = true,
                     .READ_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.READ,
-                .SYNCHRONIZE = true,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             };
             pub const WRITE: ACCESS_MASK = .{
                 .SPECIFIC = .{ .DIRECTORY = .{
@@ -3672,8 +3664,10 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .WRITE_EA = true,
                     .WRITE_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.WRITE,
-                .SYNCHRONIZE = true,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             };
 
             pub const ALL: ACCESS_MASK = .{
@@ -3688,8 +3682,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .READ_ATTRIBUTES = true,
                     .WRITE_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3711,8 +3704,7 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .READ_ATTRIBUTES = true,
                     .WRITE_ATTRIBUTES = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = true,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
@@ -3735,16 +3727,20 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .ENUMERATE_SUB_KEYS = true,
                     .NOTIFY = true,
                 } },
-                .STANDARD = STANDARD.READ,
-                .SYNCHRONIZE = false,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             };
             pub const WRITE: ACCESS_MASK = .{
                 .SPECIFIC = .{ .KEY = .{
                     .SET_VALUE = true,
                     .CREATE_SUB_KEY = true,
                 } },
-                .STANDARD = STANDARD.WRITE,
-                .SYNCHRONIZE = false,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             };
             pub const EXECUTE: ACCESS_MASK = .{
                 .SPECIFIC = .{ .KEY = .{
@@ -3752,8 +3748,10 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .ENUMERATE_SUB_KEYS = true,
                     .NOTIFY = true,
                 } },
-                .STANDARD = STANDARD.EXECUTE,
-                .SYNCHRONIZE = false,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             };
 
             pub const ALL: ACCESS_MASK = .{
@@ -3765,19 +3763,19 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                     .NOTIFY = true,
                     .CREATE_LINK = true,
                 } },
-                .STANDARD = STANDARD.REQUIRED,
-                .SYNCHRONIZE = false,
+                .STANDARD = STANDARD.ALL,
             };
         };
 
         pub const ALL: SPECIFIC = @bitCast(@as(u16, maxInt(u16)));
     };
 
-    pub const STANDARD = packed struct(u4) {
+    pub const STANDARD = packed struct(u5) {
         DELETE: bool = false,
         READ_CONTROL: bool = false,
         WRITE_DAC: bool = false,
         WRITE_OWNER: bool = false,
+        SYNCHRONIZE: bool = false,
 
         pub const REQUIRED: STANDARD = .{
             .DELETE = true,
@@ -3802,8 +3800,8 @@ pub const ACCESS_MASK = packed struct(DWORD) {
                 .READ_CONTROL = true,
                 .WRITE_DAC = true,
                 .WRITE_OWNER = true,
+                .SYNCHRONIZE = true,
             },
-            .SYNCHRONIZE = true,
         };
     };
 

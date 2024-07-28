@@ -740,11 +740,11 @@ fn spawnWindows(self: *ChildProcess) SpawnError!void {
         // "\Device\Null" or "\??\NUL"
         windows.OpenFile(unicode.utf8ToUtf16LeStringLiteral("\\Device\\Null"), .{
             .access_mask = .{
+                .STANDARD = .{ .SYNCHRONIZE = true },
                 .GENERIC = .{
                     .READ = true,
                     .WRITE = true,
                 },
-                .SYNCHRONIZE = true,
             },
             .share_access = .{},
             .sa = &saAttr,

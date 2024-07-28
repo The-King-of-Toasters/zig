@@ -922,7 +922,7 @@ pub fn openFileW(self: Dir, sub_path_w: []const u16, flags: File.OpenFlags) File
         .handle = try w.OpenFile(sub_path_w, .{
             .dir = self.fd,
             .access_mask = .{
-                .SYNCHRONIZE = true,
+                .STANDARD = .{ .SYNCHRONIZE = true },
                 .GENERIC = .{
                     .READ = flags.isRead(),
                     .WRITE = flags.isWrite(),
@@ -1074,7 +1074,7 @@ pub fn createFileW(self: Dir, sub_path_w: []const u16, flags: File.CreateFlags) 
         .handle = try w.OpenFile(sub_path_w, .{
             .dir = self.fd,
             .access_mask = .{
-                .SYNCHRONIZE = true,
+                .STANDARD = .{ .SYNCHRONIZE = true },
                 .GENERIC = .{
                     .READ = flags.read,
                     .WRITE = true,
@@ -1251,14 +1251,16 @@ pub fn makeOpenPath(self: Dir, sub_path: []const u8, open_dir_options: OpenOptio
         .windows => self.makeOpenPathAccessMaskW(
             sub_path,
             .{
-                .STANDARD = windows.ACCESS_MASK.STANDARD.READ,
                 .SPECIFIC = .{ .DIRECTORY = .{
                     .READ_ATTRIBUTES = true,
                     .READ_EA = true,
                     .TRAVERSE = true,
                     .LIST = open_dir_options.iterate,
                 } },
-                .SYNCHRONIZE = true,
+                .STANDARD = .{
+                    .READ_CONTROL = true,
+                    .SYNCHRONIZE = true,
+                },
             },
             open_dir_options.no_follow,
         ),
@@ -1351,8 +1353,8 @@ pub fn realpathW(self: Dir, pathname: []const u16, out_buffer: []u8) RealPathErr
         const res = w.OpenFile(pathname, .{
             .dir = self.fd,
             .access_mask = .{
+                .STANDARD = .{ .SYNCHRONIZE = true },
                 .GENERIC = .{ .READ = true },
-                .SYNCHRONIZE = true,
             },
             .share_access = .{},
             .creation = creation,
@@ -1557,14 +1559,16 @@ pub fn openDirW(self: Dir, sub_path_w: [*:0]const u16, args: OpenOptions) OpenEr
     const w = windows;
     // TODO remove some of these flags if args.access_sub_paths is false
     const dir = self.makeOpenDirAccessMaskW(sub_path_w, .{
-        .STANDARD = w.ACCESS_MASK.STANDARD.READ,
+        .STANDARD = .{
+            .READ_CONTROL = true,
+            .SYNCHRONIZE = true,
+        },
         .SPECIFIC = .{ .DIRECTORY = .{
             .READ_ATTRIBUTES = true,
             .READ_EA = true,
             .TRAVERSE = true,
             .LIST = args.iterate,
         } },
-        .SYNCHRONIZE = true,
     }, .{
         .no_follow = args.no_follow,
         .create_disposition = w.FILE_OPEN,

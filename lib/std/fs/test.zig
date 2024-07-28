@@ -258,13 +258,15 @@ test "File.stat on a File that is a symlink returns Kind.sym_link" {
                     const rc = windows.ntdll.NtCreateFile(
                         &result.fd,
                         .{
-                            .STANDARD = windows.ACCESS_MASK.STANDARD.READ,
+                            .STANDARD = .{
+                                .READ_CONTROL = true,
+                                .SYNCHRONIZE = true,
+                            },
                             .SPECIFIC = .{ .DIRECTORY = .{
                                 .READ_ATTRIBUTES = true,
                                 .READ_EA = true,
                                 .TRAVERSE = true,
                             } },
-                            .SYNCHRONIZE = true,
                         },
                         &attr,
                         &io,

@@ -2737,9 +2737,8 @@ pub fn renameatW(
     const src_fd = windows.OpenFile(old_path_w, .{
         .dir = old_dir_fd,
         .access_mask = .{
-            .SYNCHRONIZE = true,
+            .STANDARD = .{ .DELETE = true, .SYNCHRONIZE = true },
             .GENERIC = .{ .WRITE = true },
-            .STANDARD = .{ .DELETE = true },
         },
         .creation = windows.FILE_OPEN,
         .filter = .any, // This function is supposed to rename both files and directories.
@@ -2915,8 +2914,8 @@ pub fn mkdiratW(dir_fd: fd_t, sub_path_w: []const u16, mode: u32) MakeDirError!v
     const sub_dir_handle = windows.OpenFile(sub_path_w, .{
         .dir = dir_fd,
         .access_mask = .{
+            .STANDARD = .{ .SYNCHRONIZE = true },
             .GENERIC = .{ .READ = true },
-            .SYNCHRONIZE = true,
         },
         .creation = windows.FILE_CREATE,
         .filter = .dir_only,
@@ -3012,8 +3011,8 @@ pub fn mkdirW(dir_path_w: []const u16, mode: u32) MakeDirError!void {
     const sub_dir_handle = windows.OpenFile(dir_path_w, .{
         .dir = fs.cwd().fd,
         .access_mask = .{
+            .STANDARD = .{ .SYNCHRONIZE = true },
             .GENERIC = .{ .READ = true },
-            .SYNCHRONIZE = true,
         },
         .creation = windows.FILE_CREATE,
         .filter = .dir_only,
@@ -5459,8 +5458,8 @@ pub fn realpathW(pathname: []const u16, out_buffer: *[max_path_bytes]u8) RealPat
         const res = w.OpenFile(pathname, .{
             .dir = dir,
             .access_mask = .{
+                .STANDARD = .{ .SYNCHRONIZE = true },
                 .GENERIC = .{ .READ = true },
-                .SYNCHRONIZE = true,
             },
             .share_access = .{},
             .creation = creation,
