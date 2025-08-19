@@ -3331,13 +3331,27 @@ pub const SECURITY_ATTRIBUTES = extern struct {
     bInheritHandle: BOOL = FALSE,
 };
 
+/// A set of 32 bitflags used to encode both a user's rights to an object and
+/// the requested access when opening an object.
+///
+/// See Also:
+/// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/7a53f60e-e730-4dfe-bbe9-b21b62eb790b
+/// https://learn.microsoft.com/en-us/windows/win32/secauthz/access-mask
 pub const ACCESS_MASK = packed struct(DWORD) {
+    /// These flags are used to set rights specific to the object being used.
     SPECIFIC: SPECIFIC = @bitCast(@as(u16, 0)),
+    /// Standard rights that are common to all objects.
     STANDARD: STANDARD = .{},
     SpareBits1: u3 = 0,
+    /// Used when requesting access to an object.
+    /// Grants the ability to change an object's system ACL (SACL).
     SYSTEM_SECURITY: bool = false,
+    /// Grants the maximum permissions allowed to an object
+    /// - per the Access Check Algorithm - when used in an access request.
     MAXIMUM_ALLOWED: bool = false,
     SpareBits2: u2 = 0,
+    /// Generic rights that are mapped to object-specific user rights by the
+    /// resource manager.
     GENERIC: GENERIC = .{},
 
     pub const SPECIFIC = packed union {
@@ -3355,15 +3369,32 @@ pub const ACCESS_MASK = packed struct(DWORD) {
         PIPE: SPECIFIC.PIPE,
         KEY: SPECIFIC.KEY,
 
+        /// The access token object describes the security context of a process/thread.
+        /// These flags are used to query or adjust a token's information.
+        /// The `STANDARD.SYNCHRONIZE` flag is not supported by access tokens.
+        ///
+        /// See also:
+        /// https://learn.microsoft.com/en-us/windows/win32/secauthz/access-tokens
         pub const TOKEN = packed struct(u16) {
+            /// Required to attach a primary token to a process.
+            /// The `SE_ASSIGNPRIMARYTOKEN_NAME` privilege is also required to accomplish this task.
             ASSIGN_PRIMARY: bool = false,
+            /// Required to duplicate an access token.
             DUPLICATE: bool = false,
+            /// Required to attach an impersonation access token to a process.
             IMPERSONATE: bool = false,
+            /// Required to query an access token.
             QUERY: bool = false,
+            /// Required to query the source of an access token.
             QUERY_SOURCE: bool = false,
+            /// Required to enable or disable the privileges in an access token.
             ADJUST_PRIVILEGES: bool = false,
+            /// Required to adjust the attributes of the groups in an access token.
             ADJUST_GROUPS: bool = false,
+            /// Required to change the default owner, primary group, or DACL of an access token.
             ADJUST_DEFAULT: bool = false,
+            /// Required to adjust the session ID of an access token.
+            /// The `SE_TCB_NAME` privilege is required.
             ADJUST_SESSIONID: bool = false,
             SpareBits1: u7 = 0,
 
@@ -3402,8 +3433,17 @@ pub const ACCESS_MASK = packed struct(DWORD) {
             };
         };
 
+        /// Event objects are a synchronization primitive used to notify threads
+        /// of I/O operations.
+        /// The flags here are used to query/modify an event's state from signaled/non-signaled.
+        ///
+        /// See Also:
+        /// https://learn.microsoft.com/en-us/windows/win32/sync/event-objects
+        /// https://learn.microsoft.com/en-us/windows/win32/sync/using-event-objects
         pub const EVENT = packed struct(u16) {
+            /// Query the state of an event object.
             QUERY_STATE: bool = false,
+            /// Modify the state of an event object.
             MODIFY_STATE: bool = false,
             SpareBits1: u14 = 0,
 
@@ -3416,6 +3456,15 @@ pub const ACCESS_MASK = packed struct(DWORD) {
             };
         };
 
+        /// The semaphore is a synchronization object that maintains a count between zero and a specified maximum value.
+        /// The count is decremented each time a thread completes a wait for the
+        /// semaphore object and incremented each time a thread releases the semaphore.
+        ///
+        /// Like events, these flags are used to query/modify its state.
+        ///
+        /// See Also:
+        /// https://learn.microsoft.com/en-us/windows/win32/sync/event-objects
+        /// https://learn.microsoft.com/en-us/windows/win32/sync/using-event-objects
         pub const SEMAPHORE = packed struct(u16) {
             QUERY_STATE: bool = false,
             MODIFY_STATE: bool = false,
@@ -3430,6 +3479,14 @@ pub const ACCESS_MASK = packed struct(DWORD) {
             };
         };
 
+        /// The mutant object (also known as a mutex) is a synchronization object
+        /// whose state is set to signaled when it is not owned by any thread,
+        /// and nonsignaled when it is owned.
+        /// Mutants only support querying their state with the `QUERY_STATE` flag.
+        ///
+        /// See Also:
+        /// https://learn.microsoft.com/en-us/windows/win32/sync/mutex-objects
+        /// https://learn.microsoft.com/en-us/windows/win32/sync/using-mutex-objects
         pub const MUTANT = packed struct(u16) {
             QUERY_STATE: bool = false,
             SpareBits1: u15 = 0,
@@ -3442,11 +3499,23 @@ pub const ACCESS_MASK = packed struct(DWORD) {
             };
         };
 
+        /// The job object allows groups of processes to be managed as a single unit,
+        /// with operations performed on the job object affecting all processes associated with it.
+        /// Processes can also be associted with more than one job, allowing for a hierarchy of nested jobs.
+        ///
+        /// See Also:
+        /// https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects
         pub const JOB_OBJECT = packed struct(u16) {
+            /// Required to call the `AssignProcessToJobObject` function to assign processes to the job object.
             ASSIGN_PROCESS: bool = false,
+            /// Required to call the `SetInformationJobObject` function to set the attributes of the job object.
             SET_ATTRIBUTES: bool = false,
+            /// Required to retrieve certain information about a job object, such as attributes and accounting information.
             QUERY: bool = false,
+            /// Required to call the `TerminateJobObject` function to terminate all processes in the job object.
             TERMINATE: bool = false,
+            /// This flag was once required to call the `SetInformationJobObject` function,
+            /// but support for it was removed after Windows Vista/Server 2008.
             SET_SECURITY_ATTRIBUTES: bool = false,
             IMPERSONATE: bool = false,
             SpareBits1: u10 = 0,
